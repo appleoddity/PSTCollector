@@ -36,16 +36,16 @@ Usage:
   Why would you want to chagne the behavior of the tool? For instance, if you run the tool against an entire organizational unit and some systems in that organizational unit are old, or will never be online, you can tell PSTCollector to skip that machine by changing it's status to VOID in the XML file. You can change any location or file status to VOID to get the PSTCollector scripts to ignore that particular location or file. To ignore particular files you will have to modify the XML file on the actual workstation. To skip locations you will modify the XML file on the collection share. The log file and configuration XML files can be used to closely monitor the progress and behavior of the scripts.
   
   To start a collection you will run the CollectorMaster.ps1 script as Domain Admin (or equivalent) on a machine that has access to all workstations and can continue uninterrupted. Run the tool using the full UNC path to the file share created earlier. This is how the tool know where to grab the agent and push it to workstations. This tool can intelligently resume its progress, and can be run as many times as necessary. However, the same JOBNAME and COLLECTPATH must be used for each run, or it will not work. Locations can be changed between each run. Powershell 5 must be available on the Master system. If you like the defaults, you don't have to specify any command line switches, instead you will be prompted for them when you run the tool. Otherwise, the CollectorMaster supports the following command line switches:
-  -Mode <mode>            #REQUIRED - The mode to run the collection in (FIND, COLLECT, or REMOVE)
-  -JobName <jobname>      #REQUIRED - Give the job a descriptive name. All subsequent runs MUST use the same JobName.
-  -Locations <locations>  #REQUIRED - Specify locations, separated by commas, as an OU path, or network file path. See above.
-  -CollectPath <path>     #REQUIRED - Specify the location to the Collection share. i.e. \\fileserver\PSTCollection
-  -ConfigPath <path>      #OPTIONAL - Specify where the Master configuration file will be saved. It defaults to CollectPath.
-  -ForceRestart           #OPTIONAL - Specifying this switch will wipe out the existing configuration and start over new. CAREFUL!
-  -Noping                 #OPTIONAL - This tells PSTCollector to not attempt to ping workstations to see if it is online, before trying                                        to collect from it. Without this switch offline machines are skipped much faster.
-  -Throttlelimit          #OPTIONAL - Set the limit of active collector threads that can run at the same time. Default is 25.
-  -NoSkipCommon           #OPTIONAL - Tell the collector to check ALL folders on the hard drive for PST files. Without this switch, the                                         collector will improve performance by skipping folders we know don't usually have PST files.                                             This includes: both Program Files folders, Windows, System Volume Info, and Recycle Bins.
-  -IsArchive              #OPTIONAL - When creating the import template for Office 365, it will tell Office 365 to import the PST files                                         in to the user's archive mailbox instead of their main mailbox. Default is TRUE.
+  - Mode <mode>            #REQUIRED - The mode to run the collection in (FIND, COLLECT, or REMOVE)
+  - JobName <jobname>      #REQUIRED - Give the job a descriptive name. All subsequent runs MUST use the same JobName.
+  - Locations <locations>  #REQUIRED - Specify locations, separated by commas, as an OU path, or network file path. See above.
+  - CollectPath <path>     #REQUIRED - Specify the location to the Collection share. i.e. \\fileserver\PSTCollection
+  - ConfigPath <path>      #OPTIONAL - Specify where the Master configuration file will be saved. It defaults to CollectPath.
+  - ForceRestart           #OPTIONAL - Specifying this switch will wipe out the existing configuration and start over new. CAREFUL!
+  - Noping                 #OPTIONAL - This tells PSTCollector to not attempt to ping workstations to see if it is online, before trying                                        to collect from it. Without this switch offline machines are skipped much faster.
+  - Throttlelimit          #OPTIONAL - Set the limit of active collector threads that can run at the same time. Default is 25.
+  - NoSkipCommon           #OPTIONAL - Tell the collector to check ALL folders on the hard drive for PST files. Without this switch, the                                         collector will improve performance by skipping folders we know don't usually have PST files.                                             This includes: both Program Files folders, Windows, System Volume Info, and Recycle Bins.
+  - IsArchive              #OPTIONAL - When creating the import template for Office 365, it will tell Office 365 to import the PST files                                         in to the user's archive mailbox instead of their main mailbox. Default is TRUE.
         
   Example:
     \\fileserver\scripts\PSTCollector\CollectorMaster.ps1 -Mode FIND -JobName PSTCollect -Locations "OU=Computers,DC=Domain,DC=Local","\\fileserver\homefolders" -CollectPath \\fileserver\PSTCollection
