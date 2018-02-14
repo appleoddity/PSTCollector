@@ -27,7 +27,7 @@ Usage:
         - Create folders / append data
         
         
-  You're now ready to begin collecting PST files. The PSTCollector tool has 3 different modes that it can run in: FIND; COLLECT; and REMOVE. The tool must run in order FIND, then COLLECT, then REMOVE. You can start the tool in REMOVE mode, but it will intelligently work it's way through FIND then COLLECT then REMOVE. If there are any errors along the way, it will not proceed. It is recommended to do each step separately in large deployments so you can closely monitor it's progress.
+  You're now ready to begin collecting PST files. The PSTCollector tool has 3 different modes that it can run in: FIND; COLLECT; and REMOVE. The tool must run in order FIND, then COLLECT, then REMOVE. You can start the tool in REMOVE mode, but it will intelligently work it's way through FIND then COLLECT then REMOVE. If there are any errors along the way, it will not proceed. It is recommended to do each step separately in large deployments so you can closely monitor it's progress. **Do not REMOVE PST files until you know they are collected and imported properly AND you have removed the PST files from each user's Outlook. See the note below on the additional script I included for this.**
   
   The PSTCollector tool can collect PST files from domain joined workstations, or from network file shares. When using the tool, you can specify multiple locations to collect as either an OU path (i.e. `OU=COMPUTERS,DC=DOMAIN,DC=LOCAL`) or file share (i.e. `\\fileserver\UserData`). The CollectorAgent runs on the CollectorMaster system when collecting from a file share, and will run in the same user context of the user that started the CollectorMaster script. That user must have full access to the entire file share location for things to work properly.
   
@@ -61,6 +61,6 @@ Things to Note:
   - The Office 365 import process supports a maximum of 250 PST files for one job at this time. If you have more than 250 PST files you will have to split your exported CSV template in to multiple files and jobs.
   - All PST file copies are done using the built in RoboCopy in Windows.
   - The CollectorAgent has an undocumented parameter `ipg` which can be modified in code. This is the interpacket gap time used by RoboCopy. By default, the value is 1ms and the Agent throttles the PST copy so it doesn't overwhelm your network.
-  - **I've included an additional .vbs script that can be run as a login script or scheduled task in the `user` context of each machine to uninstall the PST file from Outlook BEFORE you use the PSTCollector to `REMOVE` the file. If you `REMOVE` the file before it is removed from Outlook, the user will get an error in Outlook.
+  - **I've included an additional .vbs script that can be run as a login script or scheduled task in the `user` context of each machine to uninstall the PST file from Outlook BEFORE you use the PSTCollector to `REMOVE` the file. If you `REMOVE` the file before it is removed from Outlook, the user will get an error in Outlook.**
   
 
