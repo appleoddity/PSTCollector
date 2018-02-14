@@ -55,7 +55,7 @@ Things to Note:
   - The PSTCollector tool creates a CSV export file during the "COLLECT" phase that can be used as the Azure import template for Office 365.
   - The actual upload to Azure and import of the PST files to Office 365 is done by Microsoft provided tools. Preferably 'AzCopy.'
   - PSTCollector tries to match the Office 365 mailbox to the PST file by looking up the e-mail address of the owner of the PST file in active directory. Users must have the user e-mail address field populated in AD for this to work. If the lookup fails for any reason, the PST file will be mapped to the email address of the "Administrator" in AD.
-  - You should review and correct mapping errors in the master configuration XML file prior to running the last COLLECT phase.
+  - You should review and correct mapping errors in the master configuration XML file prior to running the last COLLECT phase. The owner of the file should be updated if it is inaccurate.
   - You should modify the Agent and Master configuration XML files as necessary, especially using the VOID status to tell the collector to skip problematic or un-necessary locations and files.
   - The Office 365 import process supports a maximum of 250 PST files for one job at this time. If you have more than 250 PST files you will have to split your exported CSV template in to multiple files and jobs.
   - All PST file copies are done using the built in RoboCopy in Windows.
