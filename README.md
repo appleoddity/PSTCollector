@@ -52,6 +52,7 @@ Usage:
     
     
 Things to Note:
+  - Use the configuration XML files to keep track of your progress. I recommend viewing and editing them in Notepad++.
   - The PSTCollector tool creates a CSV export file during the "COLLECT" phase that can be used as the Azure import template for Office 365.
   - The actual upload to Azure and import of the PST files to Office 365 is done by Microsoft provided tools. Preferably 'AzCopy.'
   - PSTCollector tries to match the Office 365 mailbox to the PST file by looking up the e-mail address of the owner of the PST file in active directory. Users must have the user e-mail address field populated in AD for this to work. If the lookup fails for any reason, the PST file will be mapped to the email address of the "Administrator" in AD.
