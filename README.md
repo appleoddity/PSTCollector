@@ -17,14 +17,14 @@ Usage:
   
   Create an additional file share where PST files will be collected, this is the CollectPath specified when the CollectorMaster is run. It is important to pay close attention to the permissions created on the collection share to avoid giving unauthorized users access to PST files. The permissions on the collection share should be setup as follows:
   - Sharing permissiongs:
-      Grant EVERYONE, FULL CONTROL
+      - Grant EVERYONE, FULL CONTROL
   - NTFS Permissions
-      Grant Administrators and SYSTEM, FULL CONTROL to This folder, subfolders and files
-      Grant CREATOR OWNER, FULL CONTROL to Subfolders and files only
-      Grant Authenticated Users the following special permissions on This folder only:
-        Traverse folder / execute file
-        List folder / read data
-        Create folders / append data
+      - Grant Administrators and SYSTEM, FULL CONTROL to This folder, subfolders and files
+      - Grant CREATOR OWNER, FULL CONTROL to Subfolders and files only
+      - Grant Authenticated Users the following special permissions on This folder only:
+        - Traverse folder / execute file
+        - List folder / read data
+        - Create folders / append data
         
         
   You're now ready to begin collecting PST files. The PSTCollector tool has 3 different modes that it can run in: FIND; COLLECT; and REMOVE. The tool must run in order FIND, then COLLECT, then REMOVE. You can start the tool in REMOVE mode, but it will intelligently work it's way through FIND then COLLECT then REMOVE. If there are any errors along the way, it will not proceed. It is recommended to do each step separately in large deployments so you can closely monitor it's progress.
