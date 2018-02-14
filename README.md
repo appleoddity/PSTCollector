@@ -58,5 +58,7 @@ Things to Note:
   - You should review and correct mapping errors in the master configuration XML file prior to running the last COLLECT phase.
   - You should modify the Agent and Master configuration XML files as necessary, especially using the VOID status to tell the collector to skip problematic or un-necessary locations and files.
   - The Office 365 import process supports a maximum of 250 PST files for one job at this time. If you have more than 250 PST files you will have to split your exported CSV template in to multiple files and jobs.
+  - All PST file copies are done using the built in RoboCopy in Windows.
+  - The CollectorAgent has an undocumented parameter `ipg` which can be modified in code. This is the interpacket gap time used by RoboCopy. By default, the value is 1ms and the Agent throttles the PST copy so it doesn't overwhelm your network.
   
 
