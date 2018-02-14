@@ -62,6 +62,6 @@ Things to Note:
   - All PST file copies are done using the built in RoboCopy in Windows.
   - The CollectorAgent has an undocumented parameter `ipg` which can be modified in code. This is the interpacket gap time used by RoboCopy. By default, the value is 1ms and the Agent throttles the PST copy so it doesn't overwhelm your network.
   - **I've included an additional .vbs script that can be run as a login script or scheduled task in the `user` context of each machine to remove all PST files from Outlook BEFORE you use the PSTCollector to `REMOVE` the files. If you `REMOVE` the file before it is removed from Outlook, the user will get an error in Outlook.**
-  - Prior to starting the collection process you should already have pushed out GPO to block any further creation of PST files and any further expansion of PST files. This will make sure people don't create new files or change existing files after they have been collected. Users will still be able to remove items from a PST file, so if you notify them ahead of time, they can "clean" up their PST files before you collect them off their system.
+  - Prior to starting the collection process you should already have pushed out GPO to block any further creation of PST files and any further expansion of PST files. This will make sure people don't create new files or add to existing files after they have been collected. Users will still be able to remove items from a PST file, so if you notify them ahead of time, they can "clean" up their PST files before you collect them off their system.
   
 
