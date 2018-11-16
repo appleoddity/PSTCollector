@@ -230,6 +230,9 @@ $configpath = $configpath.trimend("\")
 $collectpath = $collectpath.trimend("\")
 $log = $configpath + "\MASTER-$jobname.log"
 
+#Create config path if not exist
+New-Item -ItemType Directory -Path $configpath -ErrorAction SilentlyContinue | out-null
+
 TeeLog -Message "Collector: CollectorMaster STARTING" -logfile $log
 
 if (!$forcerestart)

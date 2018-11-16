@@ -2,7 +2,7 @@
 # on each system to scan for PST files.
 # It will scan all provided locations for .PST files.
 #
-# Usage: CollectorAgent.ps1 -Mode <mode> -JobName <jobname> -Locations <locations> -CollectPath <path> [-ConfigPath <path>] [-ForceRestart] [-NoSkipCommon] [-ipg <interpacket gap throttle>]
+# Usage: CollectorAgent.ps1 -Mode <mode> -JobName <jobname> -Locations <locations> -CollectPath <path> [-ForceRestart] [-NoSkipCommon] [-ipg <interpacket gap throttle>]
 #
 Param(
     [Parameter(Mandatory=$True, Position=1)]
@@ -18,7 +18,7 @@ Param(
         [string]$collectpath,
 
     [Parameter(Position=5)]
-        [string]$configpath="$env:SystemDrive\PSTCollector",
+        [string]$configpath="$env:SystemDrive\PSTCollector",  #This is obsoleted. Due to the hardlinks used in the Agent, we are forcing the Agent to use C:\PSTCollector.
   
     [Parameter(Position=6)]
         [switch]$forcerestart=$false,
@@ -573,7 +573,8 @@ Function DoRemove
 #   exit
 #   }
 
-$configpath = $configpath.trimend("\")
+#$configpath = $configpath.trimend("\") - Obsoleted
+$configpath = "C:\PSTCollector" #New configpath is forced to C:\PSTCollector to support the hardlinks to shadowcopies.
 $collectpath = $collectpath.trimend("\")
 $log = $configpath + "\$jobname.log"
 
