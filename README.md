@@ -41,7 +41,7 @@ Usage:
   - `JobName` <jobname>      #REQUIRED - Give the job a descriptive name. All subsequent runs MUST use the same JobName.
   - `Locations` <locations>  #REQUIRED - Specify locations, separated by commas, as an OU path, or network file path. See above.
   - `CollectPath` <path>     #REQUIRED - Specify the location to the Collection share. i.e. `\\fileserver\PSTCollection`
-  - `ConfigPath` <path>      #OPTIONAL - Specify where the Master configuration file will be saved. It defaults to CollectPath.
+  - `ConfigPath` <path>      #OPTIONAL - Specify where the Master configuration file will be saved. It defaults to `C:\PSTCollector`.
   - `ForceRestart`           #OPTIONAL - Specifying this switch will wipe out the existing configuration and start over new. CAREFUL!
   - `Noping`                 #OPTIONAL - This tells PSTCollector to not attempt to ping workstations to see if it is online, before trying                                        to collect from it. Without this switch offline machines are skipped much faster.
   - `Throttlelimit`          #OPTIONAL - Set the limit of active collector threads that can run at the same time. Default is 25.
