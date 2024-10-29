@@ -397,7 +397,7 @@ foreach ($location in $locations)
         New-Item -ItemType Directory -Path "c:\PSTCollector" -ErrorAction SilentlyContinue | out-null
         Copy-Item "$PSScriptRoot\CollectorAgent.ps1" "c:\PSTCollector" -ErrorAction Stop -Force | out-null
 
-        if ($ForceRestart)
+        if ($ForceRestart -or ($XMLLocation.Status -eq "restart"))
         {
             Start-Job -Name $location -FilePath c:\PSTCollector\CollectorAgent.ps1 -ArgumentList $mode, $jobname, $location, "$collectpath\$(Sanitize($location))", "$ConfigPath\$(Sanitize($location))", $True | Out-Null
         }
@@ -473,7 +473,7 @@ foreach ($location in $locations)
                 }
                 catch { }
                 if ($LastExitCode -ne 0) { throw "Error returned during agent process: $LastExitCode" }
-            } -ArgumentList $PSScriptRoot,$($Computer.Name), $mode, $jobname, $ForceRestart, $ConfigPath\$($Computer.Name), $CollectPath\$($Computer.Name), $NoSkipCommon | out-null
+            } -ArgumentList $PSScriptRoot,$($Computer.Name), $mode, $jobname, $($ForceRestart -or ($XMLLocation.Status -eq "restart")), $ConfigPath\$($Computer.Name), $CollectPath\$($Computer.Name), $NoSkipCommon | out-null
         
             if ($XMLLocation.Path.StartsWith("\\")) { Get-Job -HasMoreData $true | Receive-Job | TeeLog -Logfile $log }
             DoStatus
