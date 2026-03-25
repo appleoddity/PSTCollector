@@ -126,6 +126,25 @@ Use these in the XML to control behavior:
 
 After collection, use AzCopy to upload PST files to Microsoft 365, then create an import job using the generated CSV file.
 
+### Recommended: Enable Archive Mailboxes
+
+PSTCollector's CSV export is configured by default to import PST files into users' **archive mailboxes** (`IsArchive = True`). Archive mailboxes provide additional storage without affecting primary mailbox quotas and are the recommended destination for historical PST data.
+
+Before importing, ensure archive mailboxes are enabled for target users:
+
+```powershell
+# Connect to Exchange Online
+Connect-ExchangeOnline
+
+# Enable archive mailbox for all users who don't have one
+Get-Mailbox -Filter {ArchiveStatus -Eq "None" -AND RecipientTypeDetails -Eq "UserMailbox"} -ResultSize Unlimited | Enable-Mailbox -Archive
+
+# Verify archive status for a specific user
+Get-Mailbox -Identity user@domain.com | Select-Object DisplayName, ArchiveStatus, ArchiveName
+```
+
+**Note:** To import to primary mailboxes instead of archives, run CollectorMaster with `-IsArchive $false`.
+
 ### Step 1: Get Azure Storage Credentials
 
 1. Go to [Microsoft Purview Portal](https://purview.microsoft.com)
