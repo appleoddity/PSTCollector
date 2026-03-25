@@ -1,9 +1,58 @@
-﻿# This is the PST Collector agent script. It should run as as a startup script, or be run by the CollectorMaster
-# on each system to scan for PST files.
-# It will scan all provided locations for .PST files.
-#
-# Usage: CollectorAgent.ps1 -Mode <mode> -JobName <jobname> -Locations <locations> -CollectPath <path> [-ForceRestart] [-NoSkipCommon] [-ipg <interpacket gap throttle>]
-#
+﻿<#
+.SYNOPSIS
+    PST Collector Agent - Scans, collects, and removes PST files from local drives or network paths.
+
+.DESCRIPTION
+    This script is deployed to workstations by CollectorMaster.ps1 or can run standalone.
+    It scans specified locations for .PST files, copies them to a central collection path
+    using RoboCopy with VSS snapshots (for locked files), and can remove source files
+    after successful collection.
+
+    The script maintains state in an XML configuration file, allowing it to resume
+    interrupted operations and track progress across multiple runs.
+
+.PARAMETER Mode
+    Operation mode: FIND (discover PSTs), COLLECT (copy to collection path), or REMOVE (delete source files).
+    Modes run in sequence - COLLECT will auto-run FIND first if needed, REMOVE will auto-run both.
+
+.PARAMETER JobName
+    Unique identifier for this collection job. Must be consistent across all runs.
+    Used for naming log files, XML configs, and collection folders.
+
+.PARAMETER Locations
+    Array of paths to scan. Use "AllLocal" to scan all local fixed drives,
+    or specify UNC paths like "\\server\share".
+
+.PARAMETER CollectPath
+    UNC path where collected PST files will be stored.
+
+.PARAMETER ConfigPath
+    Local path for configuration and log files. Defaults to C:\PSTCollector.
+    Note: This is forced to C:\PSTCollector to support VSS hardlinks.
+
+.PARAMETER ForceRestart
+    Wipe existing configuration and start fresh. Use with caution.
+
+.PARAMETER NoSkipCommon
+    Scan all folders including Program Files, Windows, etc. that are normally skipped.
+
+.PARAMETER ipg
+    RoboCopy interpacket gap in milliseconds. Default is 1ms to throttle network usage.
+
+.EXAMPLE
+    .\CollectorAgent.ps1 -Mode FIND -JobName "Migration2024" -Locations "AllLocal" -CollectPath "\\server\PSTs"
+
+.EXAMPLE
+    .\CollectorAgent.ps1 -Mode COLLECT -JobName "Migration2024" -Locations "\\fileserver\home$" -CollectPath "\\server\PSTs"
+
+.NOTES
+    Author: Appleoddity
+    Requires: Windows 7+, PowerShell 2.0+, Administrator privileges (for VSS)
+    
+    Exit Codes:
+        0 - Success
+        1 - Error (RoboCopy already running or save failure)
+#>
 Param(
     [Parameter(Mandatory=$True, Position=1)]
         [string]$mode,
@@ -30,10 +79,21 @@ Param(
         [string]$ipg="1"
 )
 
-# Set encoding for proper Unicode support
+# Set encoding for proper Unicode support in file paths and console output
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
+#region Functions
+
+<#
+.SYNOPSIS
+    Initializes or loads the XML configuration document.
+.DESCRIPTION
+    If an existing config exists and ForceRestart is false, loads it and updates runtime parameters.
+    Otherwise, creates a new XML structure with default values.
+.OUTPUTS
+    System.Xml.XmlDocument - The configuration XML document
+#>
 function InitializeXML
 {
     $XML=$null
@@ -88,10 +148,23 @@ function InitializeXML
         $XMLParameter.SetAttribute("JobName", $JobName)
     $XMLParameter=$XMLParameters.AppendChild($XML.CreateElement("Parameter"))
         $XMLParameter.SetAttribute("ForceRestart", $ForceRestart)
+    $XMLParameter=$XMLParameters.AppendChild($XML.CreateElement("Parameter"))
+        $XMLParameter.SetAttribute("IPG", $ipg)
 
     return $XML
 }
 
+<#
+.SYNOPSIS
+    Recursively scans a folder path for PST files.
+.DESCRIPTION
+    Traverses directory tree, skipping reparse points (junctions/symlinks) and
+    optionally common system folders. Returns FileInfo objects for all .pst files found.
+.PARAMETER path
+    The folder path to scan recursively.
+.OUTPUTS
+    System.IO.FileInfo[] - Array of PST file objects found
+#>
 function RecurseFolder($path)
 {
 
@@ -131,6 +204,19 @@ function RecurseFolder($path)
     $files
 }
 
+<#
+.SYNOPSIS
+    Writes a message to the log file, console, and optionally XML errors node.
+.DESCRIPTION
+    Timestamps messages in UTC format and writes to multiple outputs simultaneously.
+    Used for consistent logging throughout the script.
+.PARAMETER message
+    The message text to log.
+.PARAMETER logfile
+    Path to the log file.
+.PARAMETER errors
+    Optional XML element to append error nodes to for tracking in config.
+#>
 function TeeLog
 {
     [CmdletBinding()]
@@ -158,6 +244,20 @@ function TeeLog
     catch { }
 }
 
+<#
+.SYNOPSIS
+    Creates or retrieves a VSS (Volume Shadow Copy) snapshot for a volume.
+.DESCRIPTION
+    Enables copying of locked/in-use PST files by accessing them through a VSS snapshot.
+    Creates a directory junction (hardlink) from C:\PSTCollector\{SnapshotID} to the
+    snapshot device path. Reuses existing snapshots when possible.
+.PARAMETER Volume
+    Drive letter with colon (e.g., "C:") to snapshot.
+.PARAMETER Location
+    XML element for the current location, used to store/retrieve snapshot metadata.
+.OUTPUTS
+    Boolean - True if snapshot is ready for use, False on failure
+#>
 function SnapShotVolume ([string]$Volume, $Location)
 {
     $Volume = $Volume.TrimEnd("\").ToUpper()
@@ -244,6 +344,33 @@ function SnapShotVolume ([string]$Volume, $Location)
     return $true
 }
 
+<#
+.SYNOPSIS
+    Transfers a single file using RoboCopy with verification.
+.DESCRIPTION
+    Copies a file from source to destination using RoboCopy with:
+    - /Z: Restartable mode for large files
+    - /DCOPY:T: Copy directory timestamps
+    - /COPY:DAT: Copy Data, Attributes, Timestamps
+    - /IPG: Interpacket gap for bandwidth throttling
+    - /UNILOG: Unicode log output for international filenames
+    
+    After copy, verifies file size and timestamp match.
+.PARAMETER spath
+    Source directory path.
+.PARAMETER fname
+    Filename to copy.
+.PARAMETER dpath
+    Destination directory path (created if needed by RoboCopy).
+.PARAMETER ipg
+    Interpacket gap in milliseconds.
+.PARAMETER log
+    Path to log file.
+.PARAMETER errors
+    XML element for error tracking.
+.OUTPUTS
+    Boolean - True if copy and verification succeeded
+#>
 function TrxFile($spath, $fname, $dpath, $ipg, $log, $errors)
 {
     # Use /UNILOG for proper Unicode path/filename support in RoboCopy output
@@ -278,6 +405,16 @@ function TrxFile($spath, $fname, $dpath, $ipg, $log, $errors)
     return $true
 }
 
+<#
+.SYNOPSIS
+    Scans all configured locations for PST files.
+.DESCRIPTION
+    Iterates through each location, recursively scanning for .pst files.
+    Records each found file in the XML config with metadata (path, owner, size, timestamp).
+    Skips Outlook virtual stores (SharePoint Lists, Internet Calendar Subscriptions).
+.OUTPUTS
+    Boolean - True if all locations scanned successfully without errors
+#>
 function DoFind
 {
     $Complete = $true #Flag to track job status
@@ -345,9 +482,9 @@ function DoFind
         {
             if (!$file.FullName) { Continue } #Constantly fixing Powershell 2.0 issues
             
-            #Skip special .PSTs
-            if (!$file.FullName.ToLower() -like "sharepoint lists") { Continue }
-            if (!$file.FullName.ToLower() -like "internet calendar subscriptions") { Continue }
+            #Skip special .PSTs (Outlook virtual stores)
+            if ($file.FullName -like "*sharepoint lists*") { Continue }
+            if ($file.FullName -like "*internet calendar subscriptions*") { Continue }
             
             try
             {
@@ -375,6 +512,18 @@ function DoFind
     return $Complete
 }
 
+<#
+.SYNOPSIS
+    Copies discovered PST files to the collection path.
+.DESCRIPTION
+    For each PST file with status "Found", copies it to the CollectPath using RoboCopy.
+    For local files, creates a VSS snapshot first to handle locked files.
+    For UNC paths, copies directly from the source.
+    Verifies each copy by comparing file size and timestamp.
+    Updates file status to "Collected" or "CollectError" in XML config.
+.OUTPUTS
+    Boolean - True if all files collected successfully
+#>
 Function DoCollect
 {
     #Go through each location and transfer files to collectpath as defined in XML
@@ -486,6 +635,19 @@ Function DoCollect
     return $Complete
 }
 
+<#
+.SYNOPSIS
+    Removes source PST files after successful collection.
+.DESCRIPTION
+    For each PST file with status "Collected", deletes the original source file.
+    Skips whitelisted files (SharePoint Lists, Internet Calendar Subscriptions).
+    Updates file status to "Removed" or "RemoveError" in XML config.
+    
+    WARNING: Only run after verifying PST files are successfully imported to Exchange Online
+    and users have detached PSTs from Outlook using unloadPST.vbs.
+.OUTPUTS
+    Boolean - True if all files removed successfully
+#>
 Function DoRemove
 {
     #Go through each location and remove files as defined in XML
@@ -527,7 +689,7 @@ Function DoRemove
                         }
                         else
                         {
-                            remove-item $file.path -Force -ErrorAction Stop
+                            Remove-Item -LiteralPath $file.path -Force -ErrorAction Stop
                             TeeLog -Message "Remove successful: $($File.path)" -Logfile $log
                         }
                         $file.SetAttribute("Status", "Removed")
@@ -571,47 +733,39 @@ Function DoRemove
     
 }
 
-#Restart as NT AUTHORITY\System if not
-#if ($(whoami) -ne "NT AUTHORITY\System")
-#{
-#   $Arguments = "/s powershell.exe -ExecutionPolicy Bypass -File `"" + $myInvocation.MyCommand.Definition + "`" "
-#   
-#   foreach ($param in $PSBoundParameters.GetEnumerator())
-#   {
-#        $Arguments += "-" + $param.key + " `"" + $param.Value + "`" "
-#   }
-#
-#   #Invoke-TokenManipulation 
-#   Start-Process -FilePath "$PSScriptRoot\psexec.exe" -Verb runAS -ArgumentList $Arguments | out-null
-#
-#   # Exit from the current, unelevated, process
-#   exit
-#   }
+#endregion Functions
 
-#$configpath = $configpath.trimend("\") - Obsoleted
-$configpath = "C:\PSTCollector" #New configpath is forced to C:\PSTCollector to support the hardlinks to shadowcopies.
+#region Main Script
+# ==================================================================================
+# MAIN SCRIPT EXECUTION
+# ==================================================================================
+
+# Force config path to C:\PSTCollector to support VSS hardlinks (directory junctions)
+$configpath = "C:\PSTCollector"
 $collectpath = $collectpath.trimend("\")
 $log = $configpath + "\$jobname.log"
 
 Teelog -message "Running As: $Env:Username" -Logfile $log
 
-#Quick and dirty way to check if we might already be running (this happens when a system is put in to standby/hibernation during our collects)
+# Check for existing RoboCopy process to prevent duplicate runs
+# (Can happen when system resumes from standby/hibernation mid-collection)
 if (get-process | where-object {$_.Name -eq "robocopy"})
 {
     Teelog -message "Found process 'Robocopy' already running. This script may already be active - Quitting." -Logfile $log
     Exit 1
 }
 
-#Create config path if not exist
+# Create config path if not exist
 New-Item -ItemType Directory -Path $configpath -ErrorAction SilentlyContinue | out-null
 
+# Initialize or load XML configuration
 $XML = InitializeXML
 $XMLRoot = $XML.SelectSingleNode("//Configuration")
 $XMLErrors = $XML.SelectSingleNode("//Configuration/Errors")
 $XMLParameters = $XML.SelectSingleNode("//Configuration/Parameters")
 $XMLLocations = $XML.SelectSingleNode("//Configuration/Locations")
 
-
+# Execute requested mode
 Switch ($mode)
 {
     FIND {
@@ -626,7 +780,7 @@ Switch ($mode)
             TeeLog -message "Starting FIND job." -Logfile $log
             if (DoFind)
             {
-                TeeLog -message "The FIND operationg completed successfully." -Logfile $log
+                TeeLog -message "The FIND operation completed successfully." -Logfile $log
                 $XMLRoot.SetAttribute("Status", "Found")
             }
             else
@@ -643,7 +797,7 @@ Switch ($mode)
             TeeLog -message "This job has status '$($XMLRoot.Status)' - Performing FIND first." -Logfile $log
             if (DoFind)
             {
-                TeeLog -message "The FIND operationg completed successfully." -Logfile $log
+                TeeLog -message "The FIND operation completed successfully." -Logfile $log
                 $XMLRoot.SetAttribute("Status", "Found")
             }
             else
@@ -686,7 +840,7 @@ Switch ($mode)
             TeeLog -message "This job has status '$($XMLRoot.Status)' - Performing FIND first." -Logfile $log
             if (DoFind)
             {
-                TeeLog -message "The FIND operationg completed successfully." -Logfile $log
+                TeeLog -message "The FIND operation completed successfully." -Logfile $log
                 $XMLRoot.SetAttribute("Status", "Found")
             }
             else
@@ -703,7 +857,7 @@ Switch ($mode)
             TeeLog -message "This job has status '$($XMLRoot.Status)' - Performing COLLECT first." -Logfile $log
             if (DoCollect)
             {
-                TeeLog -message "The COLLECT operationg completed successfully." -Logfile $log
+                TeeLog -message "The COLLECT operation completed successfully." -Logfile $log
                 $XMLRoot.SetAttribute("Status", "Collected")
             }
             else

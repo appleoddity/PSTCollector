@@ -1,9 +1,72 @@
-# This is the PST Collector Master script. It handles the firing of the CollectorAgent and network scans. It also gathers and centralizes information.
-#
-# Usage: CollectorMaster.ps1 -Mode <mode> -JobName <jobname> -Locations <locations> -CollectPath <path> [-ConfigPath <path>] [-ForceRestart] [-noping] [-throttlelimit <xx>] [-NoSkipCommon] [-IsArchive <True | False>]
-#
-# Specify locations as an Organizational Unit path (i.e. OU=COMPUTERS,DC=DOMAIN,DC=LOCAL) or network file path (i.e. \\server\share\path) separted by commas.
-#
+<#
+.SYNOPSIS
+    PST Collector Master - Orchestrates PST file collection across multiple workstations and file shares.
+
+.DESCRIPTION
+    This script coordinates the discovery, collection, and removal of PST files across
+    an enterprise environment. It can target:
+    - Domain-joined workstations via Active Directory OUs (using PsExec to run CollectorAgent)
+    - Network file shares (running CollectorAgent locally via background jobs)
+    
+    After collection, generates a CSV mapping file compatible with Microsoft 365 PST Import.
+    
+    The script maintains centralized state in an XML configuration file, aggregating
+    results from all CollectorAgent instances. Can be run multiple times to catch
+    offline computers and resume interrupted operations.
+
+.PARAMETER Mode
+    Operation mode: FIND (discover PSTs), COLLECT (copy to collection path), or REMOVE (delete source files).
+
+.PARAMETER JobName
+    Unique identifier for this collection job. Must be consistent across all runs.
+
+.PARAMETER Locations
+    Array of locations to process:
+    - OU paths: "OU=Computers,DC=domain,DC=local"
+    - UNC paths: "\\server\share"
+
+.PARAMETER CollectPath
+    UNC path where collected PST files will be stored.
+
+.PARAMETER ConfigPath
+    Local path for master configuration and log files. Default: C:\PSTCollector
+
+.PARAMETER ForceRestart
+    Wipe existing configuration and start fresh. Use with caution.
+
+.PARAMETER Noping
+    Skip ping checks before processing computers. Useful when ICMP is blocked.
+
+.PARAMETER ThrottleLimit
+    Maximum concurrent background jobs. Default: 25
+
+.PARAMETER NoSkipCommon
+    Pass to CollectorAgent to scan all folders including system directories.
+
+.PARAMETER IsArchive
+    Set to $true to import PSTs to archive mailbox, $false for primary. Default: $true
+
+.PARAMETER IPG
+    RoboCopy interpacket gap in milliseconds. Default is 1ms to throttle network bandwidth.
+    Higher values reduce network impact but slow transfers.
+
+.EXAMPLE
+    .\CollectorMaster.ps1 -Mode FIND -JobName "Migration2024" `
+        -Locations "OU=Workstations,DC=corp,DC=local" -CollectPath "\\server\PSTs"
+
+.EXAMPLE
+    .\CollectorMaster.ps1 -Mode COLLECT -JobName "Migration2024" `
+        -Locations "\\fileserver\home$","\\fileserver\profiles$" -CollectPath "\\server\PSTs"
+
+.NOTES
+    Author: Appleoddity
+    Requires: PowerShell 5.0+, Domain Admin privileges, PsExec.exe in script directory
+    
+    Output Files:
+    - MASTER-{JobName}.xml: Aggregated configuration and status
+    - MASTER-{JobName}.csv: Microsoft 365 PST Import mapping file
+    - MASTER-{JobName}.log: Execution log
+#>
 Param(
     [Parameter(Mandatory=$True, Position=1)]
         [string]$mode,
@@ -33,15 +96,36 @@ Param(
         [Switch]$NoSkipCommon=$false,
 
     [Parameter(Position=10)]
-        [Boolean]$IsArchive=$true
+        [Boolean]$IsArchive=$true,
+
+    [Parameter(Position=11)]
+        [string]$ipg="1"
 )
 
+#region Functions
+
+<#
+.SYNOPSIS
+    Converts a location path to a relative path for use in file system operations.
+.PARAMETER Location
+    The location string to sanitize.
+.OUTPUTS
+    String - Path with leading/trailing backslashes removed
+#>
 function Sanitize([String]$Location)
 {
     #Converts a 'location' to a relative path suitable for using in Collect or Config path parameters
     Return $Location.TrimStart("\").TrimEnd("\")
 }
 
+<#
+.SYNOPSIS
+    Processes completed background jobs and aggregates results.
+.DESCRIPTION
+    Monitors PowerShell background jobs for each location/computer, collects their output,
+    imports child XML results into the master configuration, and appends child logs.
+    Called repeatedly during job execution to process finished work.
+#>
 function DoStatus
 {
     Get-Job -HasMoreData $true | Receive-Job | TeeLog -Logfile $log
@@ -114,6 +198,16 @@ function DoStatus
     }
 }
 
+<#
+.SYNOPSIS
+    Writes a message to the log file and console.
+.PARAMETER message
+    The message text to log.
+.PARAMETER logfile
+    Path to the log file.
+.PARAMETER errors
+    Optional XML element for error tracking.
+#>
 function TeeLog
 {
     [CmdletBinding()]
@@ -141,6 +235,26 @@ function TeeLog
     catch { }
 }
 
+<#
+.SYNOPSIS
+    Generates a Microsoft 365 PST Import CSV mapping file from collected PST data.
+.DESCRIPTION
+    Iterates through all collected PST files in the XML configuration and creates
+    a CSV file in the format required by Microsoft 365 PST Import Service.
+    
+    For each PST:
+    - Looks up the file owner's email address in Active Directory
+    - Falls back to Administrator's email if lookup fails
+    - Builds the Azure blob path based on the collection structure
+    - Sets the target import folder path
+    
+    The resulting CSV can be used directly with the Microsoft 365 Compliance Portal
+    PST Import feature after uploading files with AzCopy.
+.PARAMETER XMLToExport
+    The XML configuration document containing collected file information.
+.OUTPUTS
+    Boolean - True if any errors occurred, False on success
+#>
 function ConvertToCSV($XMLToExport)
 {
     $ErrorFlag = $False
@@ -156,7 +270,7 @@ function ConvertToCSV($XMLToExport)
     
     Foreach($Location in $Locations)
     {
-        if ($Location.Status = "Collected")
+        if ($Location.Status -eq "Collected")
         {
             $Files = $Location.SelectNodes("Files/*[@Status='Collected']")
             Foreach($File in $Files)
@@ -213,7 +327,7 @@ function ConvertToCSV($XMLToExport)
     }
     Try
     {
-        $Export | Export-Csv -NoTypeInformation "$ConfigPath\MASTER-$jobname.csv"
+        $Export | Export-Csv -NoTypeInformation -Encoding UTF8 "$ConfigPath\MASTER-$jobname.csv"
     }
     catch
     {
@@ -223,33 +337,41 @@ function ConvertToCSV($XMLToExport)
     Return $ErrorFlag
 }
 
-Get-Job | Remove-Job #Clear old jobs
+#endregion Functions
+
+#region Main Script
+# ==================================================================================
+# MAIN SCRIPT EXECUTION
+# ==================================================================================
+
+# Clean up any orphaned jobs from previous runs
+Get-Job | Remove-Job
     
 $XML = $null
-$Jobs=@()
 
+# Normalize paths
 $configpath = $configpath.trimend("\")
 $collectpath = $collectpath.trimend("\")
 $log = $configpath + "\MASTER-$jobname.log"
 
-#Create config path if not exist
+# Create config directory if it doesn't exist
 New-Item -ItemType Directory -Path $configpath -ErrorAction SilentlyContinue | out-null
 
 TeeLog -Message "Collector: CollectorMaster STARTING" -logfile $log
 
+# Load existing configuration if available and ForceRestart not specified
 if (!$forcerestart)
 {
-    #Config file exists?
     if (Test-Path "$configpath\MASTER-$jobname.xml")
     {
-        #Load it using XmlDocument.Load() for proper Unicode encoding handling
+        # Use XmlDocument.Load() for proper Unicode encoding handling
         TeeLog -Message "Collector: Loading existing config $configpath\MASTER-$jobname.xml" -logfile $log                
         $XML = New-Object System.Xml.XmlDocument
         $XML.Load("$configpath\MASTER-$jobname.xml")
     }
 }
 
-#Initialize XML
+# Initialize new XML if none loaded
 if (!$XML)
 {
     TeeLog -Message "Collector: Initializing new config $configpath\MASTER-$jobname.xml" -logfile $log                
@@ -340,6 +462,13 @@ Catch
     $XMLParameter.SetAttribute("NoSkipCommon", $NoSkipCommon)
 }
 
+Try { $XMLParameters.SelectSingleNode("Parameter[@IPG]").SetAttribute("IPG",$ipg) }
+Catch
+{
+    $XMLParameter=$XMLParameters.AppendChild($XML.CreateElement("Parameter"))
+    $XMLParameter.SetAttribute("IPG", $ipg)
+}
+
 [boolean]$Global:NotCompleteFlag = $false
 
 foreach ($location in $locations)
@@ -402,11 +531,11 @@ foreach ($location in $locations)
 
         if ($ForceRestart -or ($XMLLocation.Status -eq "restart"))
         {
-            Start-Job -Name $location -FilePath c:\PSTCollector\CollectorAgent.ps1 -ArgumentList $mode, $jobname, $location, "$collectpath\$(Sanitize($location))", "$ConfigPath\$(Sanitize($location))", $True | Out-Null
+            Start-Job -Name $location -FilePath c:\PSTCollector\CollectorAgent.ps1 -ArgumentList $mode, $jobname, $location, "$collectpath\$(Sanitize($location))", "$ConfigPath\$(Sanitize($location))", $True, $false, $ipg | Out-Null
         }
         else
         {
-            Start-Job -Name $location -FilePath c:\PSTCollector\CollectorAgent.ps1 -ArgumentList $mode, $jobname, $location, "$collectpath\$(Sanitize($location))", "$ConfigPath\$(Sanitize($location))" | Out-Null
+            Start-Job -Name $location -FilePath c:\PSTCollector\CollectorAgent.ps1 -ArgumentList $mode, $jobname, $location, "$collectpath\$(Sanitize($location))", "$ConfigPath\$(Sanitize($location))", $false, $false, $ipg | Out-Null
         }
     }
 
@@ -465,18 +594,19 @@ foreach ($location in $locations)
                 }
             }  
             Start-Job -Name $computer.Name -ScriptBlock {
-                param ($Root, $CompName, $ChildMode, $ChildJob, $ChildRestart, $ChildConfig, $ChildCollect, $ChildNoSkipCommon)
+                param ($Root, $CompName, $ChildMode, $ChildJob, $ChildRestart, $ChildConfig, $ChildCollect, $ChildNoSkipCommon, $ChildIPG)
                 try
                 {
                     New-Item -ItemType Directory -Path "\\$CompName\c$\PSTCollector" -ErrorAction SilentlyContinue | out-null
                     Copy-Item "$Root\CollectorAgent.ps1" "\\$CompName\c$\PSTCollector" -ErrorAction Stop -Force | out-null
                     if ($ChildRestart) { $ExtraParam += "-ForceRestart " }
-                    if ($ChildNoSkipCommon) { $ExtraParam += "-NoSkipCommon" }
+                    if ($ChildNoSkipCommon) { $ExtraParam += "-NoSkipCommon " }
+                    $ExtraParam += "-ipg $ChildIPG"
                     & "$Root\psexec.exe" \\$($CompName) -nobanner -accepteula -s powershell.exe -ExecutionPolicy Bypass  -Command c:\PSTCollector\CollectorAgent.ps1 -mode $ChildMode -JobName $ChildJob -Locations AllLocal -ConfigPath $ChildConfig -CollectPath $ChildCollect $ExtraParam 2>$null
                 }
                 catch { }
                 if ($LastExitCode -ne 0) { throw "Error returned during agent process: $LastExitCode" }
-            } -ArgumentList $PSScriptRoot,$($Computer.Name), $mode, $jobname, $($ForceRestart -or ($XMLLocation.Status -eq "restart")), $ConfigPath\$($Computer.Name), $CollectPath\$($Computer.Name), $NoSkipCommon | out-null
+            } -ArgumentList $PSScriptRoot,$($Computer.Name), $mode, $jobname, $($ForceRestart -or ($XMLLocation.Status -eq "restart")), $ConfigPath\$($Computer.Name), $CollectPath\$($Computer.Name), $NoSkipCommon, $ipg | out-null
         
             if ($XMLLocation.Path.StartsWith("\\")) { Get-Job -HasMoreData $true | Receive-Job | TeeLog -Logfile $log }
             DoStatus
