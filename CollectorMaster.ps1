@@ -269,7 +269,7 @@ function ConvertToCSV($XMLToExport) {
 
                 #Get mailbox - default unknowns to Administrator mailbox
                 try {
-                    $ExportedFile.Mailbox = (Get-AdUser -Identity $(Split-Path -Path $File.Owner -Leaf) -Properties EmailAddress | Select-Object EmailAddress).EmailAddress
+                    $ExportedFile.Mailbox = (Get-AdUser -Identity $(Split-Path -Path $File.Owner -Leaf -ErrorAction SilentlyContinue) -Properties EmailAddress | Select-Object EmailAddress).EmailAddress
                     if (!$ExportedFile.Mailbox) { throw "Missing E-mail address" }
                 } catch {
                     $ExportedFile.Mailbox = (Get-AdUser -Identity "Administrator" -Properties EmailAddress | Select-Object EmailAddress).EmailAddress
