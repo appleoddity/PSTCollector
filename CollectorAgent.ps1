@@ -446,7 +446,7 @@ function DoFind {
             try {
                 $XMLFile = $XMLFiles.AppendChild($XML.CreateElement("File"))
                 $XMLFile.SetAttribute("Path", $file.FullName)
-                $XMLFile.SetAttribute("Owner", $(get-acl $file.FullName).Owner)
+                $XMLFile.SetAttribute("Owner", $(get-acl -LiteralPath $file.FullName).Owner)
                 $XMLFile.SetAttribute("LastModified", $file.LastWriteTime)
                 $XMLFile.SetAttribute("FileSize", $file.Length)
                 $XMLFile.SetAttribute("LastProcessed", (Get-Date).tostring("G")) 
