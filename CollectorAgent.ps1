@@ -30,6 +30,10 @@ Param(
         [string]$ipg="1"
 )
 
+# Set encoding for proper Unicode support
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
 function InitializeXML
 {
     $XML=$null
@@ -38,8 +42,9 @@ function InitializeXML
         #Config file exists?
         if (Test-Path "$configpath\$jobname.xml")
         {
-            #Load it
-            [System.Xml.XmlDocument]$XML = get-content "$configpath\$jobname.xml" 
+            #Load it using XmlDocument.Load() for proper encoding handling
+            $XML = New-Object System.Xml.XmlDocument
+            $XML.Load("$configpath\$jobname.xml")
                 
             try
             {
@@ -147,7 +152,7 @@ function TeeLog
             $XMLError.SetAttribute("Time", (get-date).tostring("G"))
         }
         $message = (get-date).ToUniversalTime().tostring("G") + ": " + $Env:ComputerName + ": " + $message 
-        $message | out-file -FilePath $logfile -Append
+        $message | Out-File -FilePath $logfile -Append
         write-host $message
     }
     catch { }
@@ -241,13 +246,23 @@ function SnapShotVolume ([string]$Volume, $Location)
 
 function TrxFile($spath, $fname, $dpath, $ipg, $log, $errors)
 {
-    $results = & "RoboCopy.exe" "$spath" "$dpath" "$fname" /Z /DCOPY:T /COPY:DAT /IPG:$ipg /R:5 /W:30 /NP | Out-String
+    # Use /UNILOG for proper Unicode path/filename support in RoboCopy output
+    $tempLog = [System.IO.Path]::GetTempFileName()
+    
+    # Run robocopy directly with /UNILOG to capture Unicode output to file
+    # This avoids console encoding issues and works with PS remoting
+    TeeLog -Message "Starting RoboCopy with arguments: `"$($spath)`" `"$($dpath)`" `"$($fname)`" /Z /DCOPY:T /COPY:DAT /IPG:$ipg /R:5 /W:30 /NP /UNILOG:`"$($tempLog)`"" -Logfile $log
+    & "RoboCopy.exe" "$spath" "$dpath" "$fname" /Z /DCOPY:T /COPY:DAT /IPG:$ipg /R:5 /W:30 /NP /UNILOG:"$tempLog" | Out-Null
+    
+    $results = Get-Content -LiteralPath $tempLog -Encoding Unicode -Raw -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $tempLog -ErrorAction SilentlyContinue
+    
     TeeLog -Message "RoboCopy Results: $results" -Logfile $log
     TeeLog -Message "Verifying file: '$dpath\$fname'" -Logfile $log
     try 
     {
-        $sfile = get-item "$spath\$fname" -ErrorAction Stop
-        $dfile = get-item "$dpath\$fname" -ErrorAction Stop
+        $sfile = Get-Item -LiteralPath "$spath\$fname" -ErrorAction Stop
+        $dfile = Get-Item -LiteralPath "$dpath\$fname" -ErrorAction Stop
         if (Compare-Object $sfile $dfile -Property Length,LastWriteTime)
         {
             Throw "Source and Destination files do not match."
@@ -754,5 +769,3 @@ catch
 
 TeeLog -Message "CollectorAgent - Complete" -LogFile $Log
 Exit 0
-
-

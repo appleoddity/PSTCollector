@@ -61,7 +61,9 @@ function DoStatus
             if ($_.Name -like "*\*") { $ChildLocation = $_.Name } else { $ChildLocation = "AllLocal" }
             Try #Pull the XML results from the collect path
                 {
-                    [System.Xml.XmlDocument]$XMLChild = get-content "$collectpath\$(Sanitize($_.Name))\$jobname.xml"
+                    #Use XmlDocument.Load() for proper Unicode encoding handling
+                    $XMLChild = New-Object System.Xml.XmlDocument
+                    $XMLChild.Load("$collectpath\$(Sanitize($_.Name))\$jobname.xml")
                      
                     $XMLLocation.AppendChild($XML.ImportNode($XMLChild.SelectSingleNode("//Configuration/Locations/Location[@Path='$ChildLocation']/Files"), $True)) | Out-Null
                     $XMLLocation.AppendChild($XML.ImportNode($XMLChild.SelectSingleNode("//Configuration/Errors"), $True)) | Out-Null
@@ -240,9 +242,10 @@ if (!$forcerestart)
     #Config file exists?
     if (Test-Path "$configpath\MASTER-$jobname.xml")
     {
-        #Load it
+        #Load it using XmlDocument.Load() for proper Unicode encoding handling
         TeeLog -Message "Collector: Loading existing config $configpath\MASTER-$jobname.xml" -logfile $log                
-        [System.Xml.XmlDocument]$XML = get-content "$configpath\MASTER-$jobname.xml" 
+        $XML = New-Object System.Xml.XmlDocument
+        $XML.Load("$configpath\MASTER-$jobname.xml")
     }
 }
 
@@ -525,4 +528,3 @@ if (!$Global:NotCompleteFlag)
 }
 $XML.Save("$configpath\MASTER-$jobname.xml") #Save the config XML
 Write-Host "Completed."
-
