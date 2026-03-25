@@ -167,7 +167,7 @@ function DoStatus {
             #Retrieve child's log and parse only current events
             $ChildLog = @()
             $FinishLog = $false
-            Get-Content("$collectpath\$(Sanitize($_.Name))\$jobname.log") -ErrorAction SilentlyContinue |
+            Get-Content -LiteralPath "$collectpath\$(Sanitize($_.Name))\$jobname.log" -ErrorAction SilentlyContinue |
                 foreach {
                     if (!$FinishLog) {
                         try {
@@ -328,7 +328,7 @@ TeeLog -Message "Collector: CollectorMaster STARTING" -logfile $log
 
 # Load existing configuration if available and ForceRestart not specified
 if (!$forcerestart) {
-    if (Test-Path "$configpath\MASTER-$jobname.xml") {
+    if (Test-Path -LiteralPath "$configpath\MASTER-$jobname.xml") {
         # Use XmlDocument.Load() for proper Unicode encoding handling
         TeeLog -Message "Collector: Loading existing config $configpath\MASTER-$jobname.xml" -logfile $log                
         $XML = New-Object System.Xml.XmlDocument
@@ -470,7 +470,7 @@ foreach ($location in $locations) {
         }             
 
         New-Item -ItemType Directory -Path "c:\PSTCollector" -ErrorAction SilentlyContinue | Out-Null
-        Copy-Item "$PSScriptRoot\CollectorAgent.ps1" "c:\PSTCollector" -ErrorAction Stop -Force | Out-Null
+        Copy-Item -LiteralPath "$PSScriptRoot\CollectorAgent.ps1" -Destination "c:\PSTCollector" -ErrorAction Stop -Force | Out-Null
 
         if ($ForceRestart -or ($XMLLocation.Status -eq "restart")) {
             Start-Job -Name $location -FilePath c:\PSTCollector\CollectorAgent.ps1 -ArgumentList $mode, $jobname, $location, "$collectpath\$(Sanitize($location))", "$ConfigPath\$(Sanitize($location))", $True, $false, $ipg | Out-Null
@@ -528,7 +528,7 @@ foreach ($location in $locations) {
                 param ($Root, $CompName, $ChildMode, $ChildJob, $ChildRestart, $ChildConfig, $ChildCollect, $ChildNoSkipCommon, $ChildIPG)
                 try {
                     New-Item -ItemType Directory -Path "\\$CompName\c$\PSTCollector" -ErrorAction SilentlyContinue | Out-Null
-                    Copy-Item "$Root\CollectorAgent.ps1" "\\$CompName\c$\PSTCollector" -ErrorAction Stop -Force | Out-Null
+                    Copy-Item -LiteralPath "$Root\CollectorAgent.ps1" -Destination "\\$CompName\c$\PSTCollector" -ErrorAction Stop -Force | Out-Null
                     if ($ChildRestart) { $ExtraParam += "-ForceRestart " }
                     if ($ChildNoSkipCommon) { $ExtraParam += "-NoSkipCommon " }
                     $ExtraParam += "-ipg $ChildIPG"

@@ -98,7 +98,7 @@ function InitializeXML {
     $XML = $null
     if (!$forcerestart) {
         #Config file exists?
-        if (Test-Path "$configpath\$jobname.xml") {
+        if (Test-Path -LiteralPath "$configpath\$jobname.xml") {
             #Load it using XmlDocument.Load() for proper encoding handling
             $XML = New-Object System.Xml.XmlDocument
             $XML.Load("$configpath\$jobname.xml")
@@ -426,7 +426,7 @@ function DoFind {
         } else { #Scan path
             TeeLog -Message "Scanning Location: '$location'" -Logfile $log
             try {
-                if (!(Test-Path $location)) { throw "Path Not Found" }
+                if (!(Test-Path -LiteralPath $location)) { throw "Path Not Found" }
                 $files += RecurseFolder($location)
             } catch {
                 TeeLog -Message "Error while recursing location '$location' : $($_.Exception.Message)" -LogFile $Log -Errors $XMLErrors
@@ -789,7 +789,7 @@ try {
         
         #Write data to collection
         $XML.Save("$CollectPath\$jobname.xml")
-        Copy-Item "$Configpath\$jobname.log" "$collectpath" -ErrorAction Stop -Force | Out-Null
+        Copy-Item -LiteralPath "$Configpath\$jobname.log" -Destination "$collectpath" -ErrorAction Stop -Force | Out-Null
     }
 } catch {
     TeeLog -Message "Error while saving XMLs during finalize : $($_.Exception.Message)" -LogFile $Log
