@@ -213,7 +213,8 @@ azcopy jobs resume "<job-id>" --destination-sas="$sasToken"
 3. Select **I have access to the mapping file**
 4. Upload `MASTER-[JobName].csv` from `\\server\PSTCollection\`
 5. Click **Validate** and fix any errors
-6. Submit the job
+6. Submit the job and complete analysis
+7. Begin the import to Office 365
 
 ### CSV File Format
 
