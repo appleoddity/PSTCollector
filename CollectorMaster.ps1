@@ -410,7 +410,7 @@ foreach ($location in $locations)
     #Organizational Unit
     if ($location.StartsWith("ou=")) {
         
-        $Computers = @(Get-ADComputer -filter * -SearchBase $location)
+        $Computers = @(Get-ADComputer -filter {Enabled -eq $True} -SearchBase $location)
         TeeLog -Message "Collector: Processing location '$location' with '$($Computers.count)' computers." -Logfile $log
 
         foreach ($computer in $computers)
