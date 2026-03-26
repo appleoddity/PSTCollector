@@ -32,7 +32,9 @@
     Local path for master configuration and log files. Default: C:\PSTCollector
 
 .PARAMETER ForceRestart
-    Wipe existing configuration and start fresh. Use with caution.
+    Wipe existing configuration and restart ALL locations. Use with caution.
+    To restart only a single location, edit the master XML file and set that
+    location's Status attribute to "Restart" instead of using this switch.
 
 .PARAMETER Noping
     Skip ping checks before processing computers. Useful when ICMP is blocked.

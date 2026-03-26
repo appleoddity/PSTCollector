@@ -85,7 +85,7 @@ Users can still remove items from PSTs, so notify them in advance to clean up be
 | `-Locations` | Yes | Comma-separated OUs or UNC paths |
 | `-CollectPath` | Yes | UNC path to collection share |
 | `-ConfigPath` | No | Master config location (default: `C:\PSTCollector`) |
-| `-ForceRestart` | No | Wipe existing config and start fresh |
+| `-ForceRestart` | No | Wipe existing config and restart ALL locations. To restart a single location, edit the MASTER XML and set its status to `Restart` |
 | `-Noping` | No | Skip ping checks for offline detection |
 | `-ThrottleLimit` | No | Max concurrent jobs (default: 25) |
 | `-NoSkipCommon` | No | Scan all folders including Program Files, Windows, etc. |
@@ -372,10 +372,23 @@ For more details, see [Microsoft's AzCopy troubleshooting guide](https://learn.m
 
 ### Working with XML Configuration Files
 
-The XML files track all job progress and can be edited to control behavior:
+PSTCollector uses two levels of XML configuration files:
+
+**MASTER XML** (`[ConfigPath]\MASTER-[JobName].xml`, default: `C:\PSTCollector\`) - Managed by CollectorMaster:
+- Controls which locations are processed
+- Set a location's status to `Void` to prevent CollectorMaster from invoking the agent for that location
+- Set a location's status to `Restart` to re-process that location on the next run (useful when `-ForceRestart` would restart all locations)
+- Changes here take effect before CollectorAgent runs
+
+**Agent XML** (`C:\PSTCollector\[JobName].xml` on each target) - Managed by CollectorAgent:
+- Controls individual file processing within a location
+- Set a file's status to `Void` to skip that specific file
+- Changes here take effect during the next CollectorAgent run for that location
+- Agent results are copied back to the MASTER XML and to `[CollectPath]` after each run
+
+**Tips:**
 - Use **Notepad++** or similar for easier viewing/editing of large XML files
-- Set any location or file status to `Void` to skip it permanently
-- Review `Owner` attributes to fix mailbox mapping before final collection
+- Review `Owner` attributes to fix mailbox mapping before final COLLECT mode
 - Check for stuck `Incomplete` or `Error` statuses that need attention
 
 ---
