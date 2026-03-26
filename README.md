@@ -182,14 +182,14 @@ $sasToken = $SasUrl.Split('?')[1]
 
 # Upload entire collection (throttled to 10 Mbps)
 $destUrl = "$baseUrl/pstcollector?$sasToken"
-azcopy copy "\\server\PSTCollection\*" $destUrl --recursive --include-pattern "*.pst" --cap-mbps 10
+azcopy copy "\\server\PSTCollection\*" $destUrl --recursive --cap-mbps 10
 
 # Or upload specific job data
 $destUrl = "$baseUrl/pstcollector/fileserver/home`$?$sasToken"
-azcopy copy "\\server\PSTCollection\fileserver\home$\*" $destUrl --recursive --include-pattern "*.pst" --cap-mbps 10
+azcopy copy "\\server\PSTCollection\fileserver\home$\*" $destUrl --recursive --cap-mbps 10
 
 $destUrl = "$baseUrl/pstcollector/computername?$sasToken"
-azcopy copy "\\server\PSTCollection\computername\*" $destUrl --recursive --include-pattern "*.pst" --cap-mbps 10
+azcopy copy "\\server\PSTCollection\computername\*" $destUrl --recursive --cap-mbps 10
 ```
 
 **Bandwidth Throttling:** The `--cap-mbps 10` switch limits upload speed to 10 Mbps to avoid saturating network links. Adjust this value based on available bandwidth (e.g., `--cap-mbps 50` for faster uploads during off-hours). Remove the switch entirely to upload at maximum speed.
