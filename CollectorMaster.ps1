@@ -50,6 +50,10 @@
     RoboCopy interpacket gap in milliseconds. Default is 1ms to throttle network bandwidth.
     Higher values reduce network impact but slow transfers.
 
+.PARAMETER EnabledOnly
+    When processing OU locations, only target computers with Enabled=$True in Active Directory.
+    By default, all computers in the OU are targeted regardless of enabled state.
+
 .EXAMPLE
     .\CollectorMaster.ps1 -Mode FIND -JobName "Migration2024" `
         -Locations "OU=Workstations,DC=corp,DC=local" -CollectPath "\\server\PSTs"
@@ -99,7 +103,10 @@ param(
     [Boolean]$IsArchive = $true,
 
     [Parameter(Position = 11)]
-    [string]$ipg = "1"
+    [string]$ipg = "1",
+
+    [Parameter(Position = 12)]
+    [Switch]$EnabledOnly = $false
 )
 
 #region Functions
@@ -422,6 +429,12 @@ catch {
     $XMLParameter.SetAttribute("IPG", $ipg)
 }
 
+try { $XMLParameters.SelectSingleNode("Parameter[@EnabledOnly]").SetAttribute("EnabledOnly", $EnabledOnly) }
+catch {
+    $XMLParameter = $XMLParameters.AppendChild($XML.CreateElement("Parameter"))
+    $XMLParameter.SetAttribute("EnabledOnly", $EnabledOnly)
+}
+
 [boolean]$Global:NotCompleteFlag = $false
 
 foreach ($location in $locations) {
@@ -482,7 +495,11 @@ foreach ($location in $locations) {
     #Organizational Unit
     if ($location.StartsWith("ou=")) {
         
-        $Computers = @(Get-ADComputer -filter { Enabled -eq $True } -SearchBase $location)
+        if ($EnabledOnly) {
+            $Computers = @(Get-ADComputer -Filter { Enabled -eq $True } -SearchBase $location)
+        } else {
+            $Computers = @(Get-ADComputer -Filter * -SearchBase $location)
+        }
         TeeLog -Message "Collector: Processing location '$location' with '$($Computers.count)' computers." -Logfile $log
 
         foreach ($computer in $computers) {

@@ -91,6 +91,7 @@ Users can still remove items from PSTs, so notify them in advance to clean up be
 | `-NoSkipCommon` | No | Scan all folders including Program Files, Windows, etc. |
 | `-IsArchive` | No | Import to archive mailbox instead of primary (default: True) |
 | `-IPG` | No | RoboCopy interpacket gap in ms for bandwidth throttling (default: 1) |
+| `-EnabledOnly` | No | Only target enabled computers in AD when processing OUs (default: all computers) |
 
 ## Output Files
 
